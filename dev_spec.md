@@ -237,6 +237,8 @@ is_paused
 is_stale
 labels_json
 published_ports_json
+service_type
+page_title
 primary_url
 links_json
 link_source
@@ -262,6 +264,7 @@ url_override
 links_json
 hidden
 sort_order
+service_type
 created_at
 updated_at
 ```
@@ -297,6 +300,22 @@ invalid
 - 有 published port，但尚未确认 HTTP；
 - 有 HTTP 响应，但需要登录；
 - 入口可点击，但 Docker 最近一次同步已过期。
+
+### 5.4 全局设置、自定义 Tab 与外部链接
+
+SQLite 另外保存：
+
+```text
+app_settings(setting_key, setting_value, updated_at)
+custom_tabs(id, name, sort_order, created_at, updated_at)
+custom_links(id, tab_id, url, name, description, icon, page_title,
+             reachability, last_probe_at, last_probe_status, last_error,
+             sort_order, created_at, updated_at)
+```
+
+`app_settings.mock_ip:<tabId>` 为空时，该 Tab 的 published-port 链接使用 `NAS_HOME_PUBLIC_HOST`；非空时，API 返回给该 Tab 跳转使用的 URL 将该 host 替换为 mock IP，数据库仍保留原始域名。设置为 localhost 时，该 Tab 的服务端探测跳过。
+
+自定义 Tab 只允许用户维护，不参与 Docker reconcile；自定义链接支持任意 `http`/`https` URL，URL 是唯一必填字段。创建和更新时自动执行 HTTP 探测；用户填写的名称优先，没有名称时使用页面 `<title>`，仍没有 title 时回退 URL。
 
 ---
 
@@ -383,6 +402,8 @@ GET /api/health
 GET /api/v1/status
 POST /api/v1/reconcile
 GET /api/v1/events/stream
+GET /api/v1/navigation
+GET/PATCH /api/v1/settings
 ```
 
 `/api/health` 只反映 NAS Home 进程可用；`/api/v1/status` 另外返回 Docker API、最后 reconcile、数据新鲜度和版本信息。
@@ -395,6 +416,20 @@ GET    /api/v1/services/:serviceKey
 PATCH  /api/v1/services/:serviceKey/override
 DELETE /api/v1/services/:serviceKey/override
 POST   /api/v1/services/:serviceKey/probe
+```
+
+自定义导航接口：
+
+```text
+GET    /api/v1/navigation
+POST   /api/v1/custom-tabs
+PATCH  /api/v1/custom-tabs/:id
+DELETE /api/v1/custom-tabs/:id
+POST   /api/v1/custom-tabs/:id/links
+GET    /api/v1/custom-links/:id
+PATCH  /api/v1/custom-links/:id
+DELETE /api/v1/custom-links/:id
+POST   /api/v1/custom-links/:id/probe
 ```
 
 `GET /services` 支持：
@@ -456,10 +491,12 @@ sort=name|group|last_seen|order
 2. 概览条：运行中容器数、可访问服务数、待确认端口数、异常数；
 3. 搜索框：搜索显示名、容器名、镜像名、Compose service；
 4. 分组筛选：全部、按 `nas.home.group` 和 Compose project；
-5. 服务列表：默认按 `order`、group、name 排序；
-6. 每张服务卡：图标、显示名、描述、容器名、状态、primary link、其他端口、来源 badge、最近探测；
+5. 服务列表：分为“前台服务”和“后台服务”两个 Tab，默认打开前台服务；无 published TCP port 的容器默认归类为后台服务，用户可通过 override 手工修改服务类型；
+6. 每张服务卡：图标、探测到的页面 title（无 title 时回退显示名）、描述、所属容器名、状态、所有有 HTTP 响应的端口链接（按 host port 升序）、来源 badge、最近探测；
 7. 已停止/无链接服务折叠区；
 8. Docker 不可用或数据 stale 时显示顶部告警，不隐藏旧数据。
+9. Tab 区保留前台/后台两个内置 Tab，并支持用户新建、重命名、删除自定义 Tab；自定义 Tab 内展示任意外部 HTTP/HTTPS 链接。
+10. 设置面板提供全局 mock IP；自定义链接维护表单允许只填 URL，也允许补全名称、描述、图标和排序。
 
 ### 8.2 交互
 
@@ -472,6 +509,7 @@ sort=name|group|last_seen|order
 - 端口变化、容器重建、名称变化后 UI 自动更新；
 - 长容器名和长 URL 必须可折叠，页面不能横向溢出；
 - 支持 `prefers-reduced-motion`，不使用持续高消耗动画。
+- 自定义链接卡片支持打开、复制、编辑、删除和重新探测；探测结果显示页面 title、HTTP 状态和可达性。
 
 ### 8.3 详情抽屉
 
@@ -486,7 +524,7 @@ sort=name|group|last_seen|order
 - override 编辑入口；
 - “重新探测”按钮。
 
-第一版 override 编辑只允许改名称、描述、分组、图标、URL、隐藏和排序，不提供容器控制按钮。
+第一版 override 编辑只允许改名称、描述、分组、图标、URL、服务类型、隐藏和排序，不提供容器控制按钮。
 
 ---
 

@@ -26,6 +26,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/status", s.status)
 	mux.HandleFunc("/api/v1/reconcile", s.reconcile)
 	mux.HandleFunc("/api/v1/events/stream", s.eventsStream)
+	mux.HandleFunc("/api/v1/settings", s.settings)
+	mux.HandleFunc("/api/v1/navigation", s.navigation)
+	mux.HandleFunc("/api/v1/custom-tabs", s.customTabs)
+	mux.HandleFunc("/api/v1/custom-tabs/", s.customTabs)
+	mux.HandleFunc("/api/v1/custom-links/", s.customLinks)
 	mux.HandleFunc("/api/v1/services", s.services)
 	mux.HandleFunc("/api/v1/services/", s.service)
 	mux.Handle("/", http.FileServer(http.Dir("/app/frontend")))
@@ -109,7 +114,7 @@ func (s *Server) services(w http.ResponseWriter, r *http.Request) {
 		if reachableFilter == "false" && isReachable {
 			continue
 		}
-		result = append(result, service)
+		result = append(result, s.decorateService(service))
 	}
 	sort.SliceStable(result, func(i, j int) bool {
 		switch sortBy {
@@ -157,7 +162,7 @@ func (s *Server) service(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 500, map[string]string{"error": "probe failed"})
 			return
 		}
-		writeJSON(w, 200, service)
+		writeJSON(w, 200, s.decorateService(service))
 		return
 	}
 	if strings.HasSuffix(key, "/override") {
@@ -176,7 +181,7 @@ func (s *Server) service(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	writeJSON(w, 200, service)
+	writeJSON(w, 200, s.decorateService(service))
 }
 func (s *Server) override(w http.ResponseWriter, r *http.Request, key string) {
 	if key == "" {
@@ -187,6 +192,10 @@ func (s *Server) override(w http.ResponseWriter, r *http.Request, key string) {
 	case http.MethodDelete:
 		if err := s.Store.DeleteOverride(r.Context(), key); err != nil {
 			writeJSON(w, 500, map[string]string{"error": "override delete failed"})
+			return
+		}
+		if err := s.Store.ResetServiceType(r.Context(), key); err != nil && !store.IsNotFound(err) {
+			writeJSON(w, 500, map[string]string{"error": "service type reset failed"})
 			return
 		}
 	case http.MethodPatch:
@@ -203,6 +212,10 @@ func (s *Server) override(w http.ResponseWriter, r *http.Request, key string) {
 				return
 			}
 		}
+		if incoming.ServiceType != nil && *incoming.ServiceType != "frontend" && *incoming.ServiceType != "backend" {
+			writeJSON(w, 400, map[string]string{"error": "invalid service type"})
+			return
+		}
 		current, err := s.Store.GetOverride(r.Context(), key)
 		if err != nil && !store.IsNotFound(err) {
 			writeJSON(w, 500, map[string]string{"error": "override read failed"})
@@ -212,6 +225,12 @@ func (s *Server) override(w http.ResponseWriter, r *http.Request, key string) {
 		if err := s.Store.SaveOverride(r.Context(), key, current); err != nil {
 			writeJSON(w, 500, map[string]string{"error": "override save failed"})
 			return
+		}
+		if incoming.ServiceType != nil {
+			if err := s.Store.SetServiceType(r.Context(), key, *incoming.ServiceType); err != nil && !store.IsNotFound(err) {
+				writeJSON(w, 500, map[string]string{"error": "service type save failed"})
+				return
+			}
 		}
 	default:
 		http.Error(w, "method not allowed", 405)
@@ -223,7 +242,7 @@ func (s *Server) override(w http.ResponseWriter, r *http.Request, key string) {
 		http.NotFound(w, r)
 		return
 	}
-	writeJSON(w, 200, service)
+	writeJSON(w, 200, s.decorateService(service))
 }
 func mergeOverride(dst *store.Override, src store.Override) {
 	if src.Name != nil {
@@ -246,5 +265,8 @@ func mergeOverride(dst *store.Override, src store.Override) {
 	}
 	if src.SortOrder != nil {
 		dst.SortOrder = src.SortOrder
+	}
+	if src.ServiceType != nil {
+		dst.ServiceType = src.ServiceType
 	}
 }

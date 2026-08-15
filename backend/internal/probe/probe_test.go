@@ -14,12 +14,20 @@ func TestProbeFallsBackFromHead405AndTreatsAuthAsResponse(t *testing.T) {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
+		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`<html><head><title>需要登录</title><link rel="icon" href="/assets/app.svg"></head></html>`))
 	}))
 	defer server.Close()
 	result := New(time.Second).Probe(context.Background(), server.URL)
 	if !result.Reachable || result.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("probe = %#v", result)
+	}
+	if result.Title != "需要登录" {
+		t.Fatalf("title = %q", result.Title)
+	}
+	if result.IconURL != server.URL+"/assets/app.svg" {
+		t.Fatalf("icon = %q", result.IconURL)
 	}
 }
 

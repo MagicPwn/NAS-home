@@ -15,6 +15,7 @@ type Override struct {
 	URL         *string `json:"url,omitempty"`
 	Hidden      *bool   `json:"hidden,omitempty"`
 	SortOrder   *int    `json:"sortOrder,omitempty"`
+	ServiceType *string `json:"serviceType,omitempty"`
 }
 
 func (s *Store) GetOverride(ctx context.Context, key string) (Override, error) {
@@ -64,6 +65,9 @@ func (s *Store) ApplyOverride(service Service, override Override) Service {
 	}
 	if override.SortOrder != nil {
 		service.Order = *override.SortOrder
+	}
+	if override.ServiceType != nil {
+		service.ServiceType = normalizeServiceType(*override.ServiceType)
 	}
 	return service
 }

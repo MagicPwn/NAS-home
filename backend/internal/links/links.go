@@ -23,6 +23,7 @@ const (
 	ReachabilityRespondingAuthenticated Reachability = "responding-authenticated"
 	ReachabilityRespondingError         Reachability = "responding-error"
 	ReachabilityUnconfirmed             Reachability = "unconfirmed"
+	ReachabilityNotChecked              Reachability = "not-checked"
 	ReachabilityLocalOnly               Reachability = "local-only"
 	ReachabilityNotPublished            Reachability = "not-published"
 	ReachabilityInvalid                 Reachability = "invalid"
@@ -47,6 +48,8 @@ type PublishedPort struct {
 type Link struct {
 	URL           string       `json:"url"`
 	Label         string       `json:"label"`
+	PageTitle     string       `json:"pageTitle,omitempty"`
+	IconURL       string       `json:"iconUrl,omitempty"`
 	Source        Source       `json:"source"`
 	Reachability  Reachability `json:"reachability"`
 	LocalOnly     bool         `json:"localOnly"`

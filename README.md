@@ -11,6 +11,10 @@ NAS Home 是 NAS 本地服务发现入口：读取本机 Docker 容器元数据�
 - HTTP 探测：自动端口只探测后端生成的 published-port 地址，HEAD 失败用 GET fallback，限制超时、不跟随重定向，并缓存 30 秒；401/403/4xx 仍被记录为有响应。
 - API：`/api/health`、`/api/v1/status`、`/api/v1/services`、详情、override、手动 reconcile、手动 probe 和 SSE endpoint。
 - React/Vite 首页：搜索、分组/状态/可达性筛选、已隐藏筛选、状态概览、打开/复制链接、详情抽屉、最近三次探测和重新探测。
+- 服务按“前台服务 / 后台服务”分 Tab；无 published TCP port 的容器默认进入后台，详情中可手工切换类型并持久化到 SQLite。
+- 自动入口只展示有 HTTP(S) 响应的端口，按 host port 升序排列；服务卡标题优先使用探测到的 HTML `<title>`，容器名作为独立信息字段。
+- 全局设置支持按 Tab 保存 mock IP 到 SQLite；设置后，该 Tab 的 Docker 服务跳转中的 `NAS_HOME_PUBLIC_HOST` 会替换为该 IP。每个 Tab 独立保存，填写 localhost 时跳过该 Tab 的服务可达性探测，留空恢复原始域名。
+- 支持自定义 Tab 和外部链接：Tab、链接、名称、描述、排序均保存于 SQLite；链接可只填写 URL，保存时自动探测 HTTP 状态和页面 `<title>`，也可手动补全信息。
 - Docker Compose 默认端口为 `9080:8080`，SQLite 数据在 `/data` 持久化，NAS Home 以 UID 10001 运行。
 
 ## 启动
@@ -24,6 +28,7 @@ docker compose --env-file deploy/.env -f deploy/compose.yml up -d --build
 curl -fsS http://127.0.0.1:9080/api/health
 curl -fsS http://127.0.0.1:9080/api/v1/status
 curl -fsS http://127.0.0.1:9080/api/v1/services
+curl -fsS http://127.0.0.1:9080/api/v1/navigation
 ```
 
 停止：
@@ -60,6 +65,17 @@ labels:
 4. 只有内部端口、EXPOSE 或无 host binding：显示端口信息但不生成链接。
 5. `127.0.0.1`/`::1`：显示“仅 NAS 本机可访问”，不会伪装成局域网入口。
 6. `0.0.0.0`、`::` 或空 bind address：使用 `NAS_HOME_PUBLIC_HOST`，而不是 localhost 或容器内部地址。
+7. 设置了 mock IP 时，仅该 Tab API 返回给前台跳转使用的 published-port URL 被替换；SQLite 保留原始域名，清空该 Tab 设置即可恢复。设置为 localhost 时，该 Tab 不执行服务端可达性探测。
+
+## 自定义 Tab 与外部链接
+
+首页可创建任意命名的自定义 Tab，维护 NAS 之外的 HTTP/HTTPS 服务。添加链接时 URL 是唯一必填项：
+
+- 只填 URL：系统自动探测 HTTP 状态、可达性和页面 `<title>`；没有 title 时使用 URL。
+- 填写名称、描述、图标和排序：这些信息按手工填写保存，页面 title 仍作为探测信息保留。
+- 链接支持编辑、删除和重新探测；删除 Tab 会同时删除其链接。
+
+对应 API：`GET /api/v1/navigation`、`PATCH /api/v1/settings`、`POST/PATCH/DELETE /api/v1/custom-tabs`、`POST /api/v1/custom-tabs/<tabId>/links`、`GET/PATCH/DELETE /api/v1/custom-links/<id>` 和 `POST /api/v1/custom-links/<id>/probe`。
 
 ## Docker socket 权限边界
 
@@ -82,6 +98,8 @@ cd ../../frontend
 npm install
 npm run typecheck
 npm run build
+# 固定开发地址：http://<NAS主机>:5175，/api 代理到生产/开发后端 9080
+npm run dev
 cd ..
 docker compose --env-file deploy/.env.example -f deploy/compose.yml config --quiet
 ```

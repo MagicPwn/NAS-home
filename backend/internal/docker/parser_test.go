@@ -22,7 +22,7 @@ func TestCleanContainerNameAndStableKey(t *testing.T) {
 
 func TestParsePublishedPortsUsesHostPortAndFiltersUnpublished(t *testing.T) {
 	input := map[string][]PortBinding{
-		"8080/tcp": {{HostIP: "0.0.0.0", HostPort: "18080"}},
+		"8080/tcp": {{HostIP: "0.0.0.0", HostPort: "18080"}, {HostIP: "::", HostPort: "18080"}},
 		"5353/udp": {{HostIP: "0.0.0.0", HostPort: "15353"}},
 		"9000/tcp": nil,
 	}

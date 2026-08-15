@@ -1,0 +1,15 @@
+# Development-only direct socket override.
+# Use only when developing locally and understand that the socket grants Docker control.
+services:
+  nas-home:
+    user: "0:0"
+    environment:
+      DOCKER_HOST: unix:///var/run/docker.sock
+    volumes:
+      - nas-home-data:/data
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        read_only: true
+        bind:
+          create_host_path: false

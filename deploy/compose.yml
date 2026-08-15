@@ -1,0 +1,74 @@
+name: nas-home
+
+services:
+  docker-socket-proxy:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: socket-proxy
+    container_name: nas-home-docker-proxy
+    restart: unless-stopped
+    user: "0:0"
+    init: true
+    environment:
+      DOCKER_SOCKET: /var/run/docker.sock
+    volumes:
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:2375/_ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  nas-home:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: nas-home
+    restart: unless-stopped
+    user: "10001:10001"
+    init: true
+    depends_on:
+      docker-socket-proxy:
+        condition: service_healthy
+    ports:
+      - "${NAS_HOME_PORT:-9080}:8080"
+    environment:
+      NAS_HOME_PUBLIC_HOST: ${NAS_HOME_PUBLIC_HOST:?NAS_HOME_PUBLIC_HOST is required}
+      NAS_HOME_PUBLIC_SCHEME: ${NAS_HOME_PUBLIC_SCHEME:-http}
+      NAS_HOME_POLL_INTERVAL: ${NAS_HOME_POLL_INTERVAL:-10s}
+      NAS_HOME_PROBE_TIMEOUT: ${NAS_HOME_PROBE_TIMEOUT:-3s}
+      NAS_HOME_RECONCILE_TIMEOUT: ${NAS_HOME_RECONCILE_TIMEOUT:-8s}
+      NAS_HOME_LOG_LEVEL: ${NAS_HOME_LOG_LEVEL:-info}
+      NAS_HOME_DATA_DIR: /data
+      DOCKER_HOST: tcp://docker-socket-proxy:2375
+    volumes:
+      - nas-home-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/nas-home", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  nas-home-data:

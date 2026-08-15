@@ -1,0 +1,6 @@
+.git
+.gitignore
+frontend/node_modules
+frontend/dist
+backend/nas-home
+backend/*.db

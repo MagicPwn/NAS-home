@@ -1,0 +1,63 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Clipboard, ExternalLink, Filter, RefreshCw, Search, Server, X } from 'lucide-react'
+
+type LinkInfo = { url: string; label: string; source: string; reachability: string; localOnly: boolean }
+type ProbeRecord = { url: string; at: string; status?: string; reachability: string; error?: string }
+type Service = { serviceKey: string; name: string; containerName: string; image: string; composeProject?: string; composeService?: string; containerState: string; running: boolean; paused: boolean; hidden: boolean; group: string; description: string; icon: string; primaryUrl?: string; links: LinkInfo[]; publishedPorts: { hostIp: string; hostPort: number; containerPort: number; protocol: string }[]; linkSource?: string; reachability: string; localOnly: boolean; stale: boolean; lastSeenAt: string; probeHistory?: ProbeRecord[]; lastProbeAt?: string; lastProbeStatus?: string; lastError?: string }
+type Status = { docker: { available: boolean; lastError?: string }; lastReconcileAt?: string; stale: boolean }
+
+const sourceLabels: Record<string, string> = { manual: '手工配置', label: 'Docker 标签', 'published-port': '发布端口' }
+const reachLabels: Record<string, string> = { reachable: '可访问', 'responding-authenticated': '需要登录', 'responding-error': '服务已响应', unconfirmed: '待确认', 'local-only': '仅 NAS 本机', 'not-published': '未发布端口', invalid: '链接无效' }
+
+function normalizeService(service: Service): Service { return { ...service, links: service.links ?? [], publishedPorts: service.publishedPorts ?? [], probeHistory: service.probeHistory ?? [] } }
+async function getJSON<T>(url: string): Promise<T> { const response = await fetch(url); if (!response.ok) throw new Error(`${response.status} ${response.statusText}`); return response.json() }
+
+export default function App() {
+  const [services, setServices] = useState<Service[]>([])
+  const [status, setStatus] = useState<Status | null>(null)
+  const [query, setQuery] = useState('')
+  const [group, setGroup] = useState('')
+  const [state, setState] = useState('all')
+  const [includeHidden, setIncludeHidden] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [selected, setSelected] = useState<Service | null>(null)
+
+  const load = useCallback(async (manual = false) => { if (manual) setLoading(true); try { const params = new URLSearchParams({ q: query, group, state, include_hidden: String(includeHidden) }); const [list, currentStatus] = await Promise.all([getJSON<{ services: Service[] }>(`/api/v1/services?${params}`), getJSON<Status>('/api/v1/status')]); setServices(list.services.map(normalizeService)); setStatus(currentStatus); setError('') } catch (e) { setError(e instanceof Error ? e.message : '加载失败') } finally { setLoading(false) } }, [query, group, state, includeHidden])
+  useEffect(() => { void load(true); const timer = window.setInterval(() => void load(), 10000); return () => window.clearInterval(timer) }, [load])
+
+  const groups = useMemo(() => Array.from(new Set(services.map(s => s.group).filter(Boolean))).sort(), [services])
+  const runningCount = services.filter(s => s.running).length
+  const reachableCount = services.filter(s => ['reachable', 'responding-authenticated', 'responding-error'].includes(s.reachability)).length
+  const pendingCount = services.filter(s => s.reachability === 'unconfirmed').length
+  const errorCount = services.filter(s => s.lastError || s.reachability === 'invalid').length
+  const refresh = async () => { setLoading(true); try { await fetch('/api/v1/reconcile', { method: 'POST' }); await load() } finally { setLoading(false) } }
+  const reprobe = async () => { if (!selected) return; const response = await fetch(`/api/v1/services/${encodeURIComponent(selected.serviceKey)}/probe`, { method: 'POST' }); if (!response.ok) { window.alert('重新探测失败'); return }; const updated = await response.json() as Service; setSelected(updated); setServices(current => current.map(item => item.serviceKey === updated.serviceKey ? updated : item)) }
+  const copy = async (url: string) => { try { await navigator.clipboard.writeText(url); window.alert('链接已复制') } catch { window.prompt('复制链接', url) } }
+
+  return <main className="shell">
+    <header className="topbar"><div className="brand"><div className="brand-mark"><Server size={24} /></div><div><h1>NAS Home</h1><p>发现本机容器服务，打开所有入口。</p></div></div><div className="sync"><span className={status?.docker.available ? 'dot online' : 'dot'} /> Docker {status?.docker.available ? '已连接' : '不可用'}<small>{status?.lastReconcileAt ? `最后同步 ${new Date(status.lastReconcileAt).toLocaleTimeString()}` : '尚未同步'}</small><button className="ghost" onClick={() => void refresh()}><RefreshCw size={16} />刷新</button></div></header>
+    {status?.stale || error ? <div className="alert"><strong>{error ? '数据读取异常' : '数据可能已过期'}</strong><span>{error || status?.docker.lastError || '保留上一次快照，等待 Docker 恢复。'}</span></div> : null}
+    <section className="stats"><Stat label="运行中容器" value={runningCount} tone="blue" /><Stat label="可访问服务" value={reachableCount} tone="green" /><Stat label="待确认端口" value={pendingCount} tone="amber" /><Stat label="异常" value={errorCount} tone="red" /></section>
+    <section className="toolbar"><label className="search"><Search size={18} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索名称、容器、镜像或 Compose service" /></label><label className="select"><Filter size={16} /><select value={group} onChange={e => setGroup(e.target.value)}><option value="">全部分组</option>{groups.map(g => <option key={g}>{g}</option>)}</select></label><label className="select"><select value={state} onChange={e => setState(e.target.value)}><option value="all">全部状态</option><option value="running">运行中</option><option value="stopped">已停止</option></select></label><label className="toggle"><input type="checkbox" checked={includeHidden} onChange={e => setIncludeHidden(e.target.checked)} />显示已隐藏</label></section>
+    {loading && services.length === 0 ? <div className="state-box">正在读取本机容器…</div> : error && services.length === 0 ? <div className="state-box"><Server size={40} /><h2>暂时无法连接 Docker</h2><p>服务会保留已有快照；请检查 Docker socket 或代理。</p></div> : services.length === 0 ? <div className="state-box"><Server size={40} /><h2>没有匹配的服务</h2><p>调整搜索或筛选条件后再试。</p></div> : <section className="service-grid">{services.map(service => <ServiceCard key={service.serviceKey} service={service} onDetail={() => setSelected(service)} onCopy={copy} />)}</section>}
+    {selected ? <aside className="drawer"><div className="drawer-head"><div><span className="eyebrow">服务详情</span><h2>{selected.name}</h2></div><button className="icon-button" onClick={() => setSelected(null)}><X /></button></div><dl className="details"><dt>稳定 Key</dt><dd>{selected.serviceKey}</dd><dt>容器</dt><dd>{selected.containerName}</dd><dt>镜像</dt><dd className="wrap">{selected.image}</dd><dt>状态</dt><dd>{selected.containerState}</dd><dt>分组</dt><dd>{selected.group || '未分组'}</dd><dt>入口</dt><dd>{selected.primaryUrl || reachLabels[selected.reachability] || '无'}</dd></dl><h3>Published ports</h3><div className="port-list">{selected.publishedPorts.length ? selected.publishedPorts.map((p, i) => <div key={`${p.hostPort}-${i}`}><code>{p.hostIp || '0.0.0.0'}:{p.hostPort}</code><span>→ 容器 {p.containerPort}/{p.protocol}</span></div>) : <p>没有已发布端口</p>}</div><h3>链接来源</h3><p className="muted">{sourceLabels[selected.linkSource || ''] || '未生成自动链接'} · {reachLabels[selected.reachability] || selected.reachability}</p><button className="probe-button" onClick={() => void reprobe()}><RefreshCw size={14} />重新探测</button><h3>最近探测</h3><div className="probe-history">{selected.probeHistory?.length ? selected.probeHistory.slice().reverse().map((probe, index) => <div key={`${probe.at}-${index}`}><span>{new Date(probe.at).toLocaleString()}</span><strong>{reachLabels[probe.reachability] || probe.reachability}</strong><small>{probe.status || probe.error || '无状态'}</small></div>) : <p>暂无探测记录</p>}</div><OverrideEditor key={selected.serviceKey} service={selected} onSaved={updated => { setSelected(updated); setServices(current => current.map(item => item.serviceKey === updated.serviceKey ? updated : item)) }} /></aside> : null}
+  </main>
+}
+
+function Stat({ label, value, tone }: { label: string; value: number; tone: string }) { return <div className={`stat ${tone}`}><span>{label}</span><strong>{value}</strong></div> }
+function ServiceCard({ service, onDetail, onCopy }: { service: Service; onDetail: () => void; onCopy: (url: string) => void }) { const disabled = !service.primaryUrl || service.localOnly || service.reachability === 'invalid' || service.reachability === 'unconfirmed'; return <article className={`card ${!service.running ? 'stopped' : ''}`}><div className="card-head"><div className="service-icon"><Server size={20} /></div><div className="card-title"><h2 title={service.name}>{service.name}</h2><span className="container-name" title={service.containerName}>{service.containerName}</span></div><span className={`status ${service.running ? 'running' : 'stopped'}`}>{service.containerState}</span></div>{service.description && <p className="description">{service.description}</p>}<div className="meta"><span className="badge">{service.group || '未分组'}</span>{service.linkSource && <span className="badge source">{sourceLabels[service.linkSource] || service.linkSource}</span>}<span className="reach">{reachLabels[service.reachability] || service.reachability}</span></div><div className="link-row">{service.primaryUrl ? <code title={service.primaryUrl}>{service.primaryUrl}</code> : <span className="no-link">{reachLabels[service.reachability] || '没有可用入口'}</span>}<div className="actions"><button disabled={disabled} onClick={() => service.primaryUrl && window.open(service.primaryUrl, '_blank', 'noopener,noreferrer')}><ExternalLink size={15} />打开</button>{service.primaryUrl && <button className="secondary" onClick={() => onCopy(service.primaryUrl!)}><Clipboard size={15} />复制</button>}<button className="secondary" onClick={onDetail}>详情</button></div></div>{service.publishedPorts.length > 0 && <div className="ports">{service.publishedPorts.map(p => <span key={`${p.hostPort}/${p.protocol}`}>{p.hostIp || '0.0.0.0'}:{p.hostPort} → {p.containerPort}/{p.protocol}</span>)}</div>}</article> }
+
+function OverrideEditor({ service, onSaved }: { service: Service; onSaved: (service: Service) => void }) {
+  const [name, setName] = useState(service.name)
+  const [group, setGroup] = useState(service.group)
+  const [description, setDescription] = useState(service.description)
+  const [url, setUrl] = useState(service.primaryUrl || '')
+  const [hidden, setHidden] = useState(service.hidden)
+  const [sortOrder, setSortOrder] = useState(0)
+  const [message, setMessage] = useState('')
+  const endpoint = `/api/v1/services/${encodeURIComponent(service.serviceKey)}/override`
+  const save = async () => { setMessage('保存中…'); const payload: Record<string, unknown> = { name, group, description, hidden, sortOrder }; if (url.trim()) payload.url = url.trim(); const response = await fetch(endpoint, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); if (!response.ok) { const body = await response.json().catch(() => ({})); setMessage(body.error || '保存失败'); return } const updated = await response.json() as Service; onSaved(updated); setMessage('已保存') }
+  const remove = async () => { setMessage('恢复中…'); const response = await fetch(endpoint, { method: 'DELETE' }); if (!response.ok) { setMessage('恢复失败'); return } const updated = await response.json() as Service; onSaved(updated); setMessage('已恢复 Docker 配置') }
+  return <section className="override"><h3>手工配置</h3><div className="override-grid"><label>名称<input value={name} onChange={e => setName(e.target.value)} /></label><label>分组<input value={group} onChange={e => setGroup(e.target.value)} /></label><label className="wide">描述<input value={description} onChange={e => setDescription(e.target.value)} /></label><label className="wide">URL<input value={url} onChange={e => setUrl(e.target.value)} placeholder="http(s)://host:port/path" /></label><label>排序<input type="number" value={sortOrder} onChange={e => setSortOrder(Number(e.target.value))} /></label><label className="check"><input type="checkbox" checked={hidden} onChange={e => setHidden(e.target.checked)} />隐藏服务</label></div><div className="override-actions"><button onClick={() => void save()}>保存配置</button><button className="secondary" onClick={() => void remove()}>恢复自动发现</button><span>{message}</span></div></section>
+}

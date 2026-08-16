@@ -15,7 +15,7 @@ NAS Home 是 NAS 本地服务发现入口：读取本机 Docker 容器元数据�
 - 自动入口只展示有 HTTP(S) 响应的端口，按 host port 升序排列；服务卡标题优先使用探测到的 HTML `<title>`，容器名作为独立信息字段。
 - 全局设置支持按 Tab 保存 mock IP 到 SQLite；设置后，该 Tab 的 Docker 服务跳转中的 `NAS_HOME_PUBLIC_HOST` 会替换为该 IP。每个 Tab 独立保存，填写 localhost 时跳过该 Tab 的服务可达性探测，留空恢复原始域名。
 - 支持自定义 Tab 和外部链接：Tab、链接、名称、描述、排序均保存于 SQLite；链接可只填写 URL，保存时自动探测 HTTP 状态和页面 `<title>`，也可手动补全信息。
-- Docker Compose 默认端口为 `9080:8080`，SQLite 数据在 `/data` 持久化，NAS Home 以 UID 10001 运行。
+- Docker Compose 默认端口为 `1111:8080`，SQLite 数据在 `/data` 持久化，NAS Home 以 UID 10001 运行。UGOS Pro 系统 nginx 已占用 `9999`，NAS Home 使用浏览器允许的 `1111` 作为入口。
 
 ## 启动
 
@@ -25,10 +25,10 @@ cp deploy/.env.example deploy/.env
 # 修改 NAS_HOME_PUBLIC_HOST：使用 NAS IP、局域网 DNS 或实际域名，不要使用 localhost
 ./scripts/preflight.sh
 docker compose --env-file deploy/.env -f deploy/compose.yml up -d --build
-curl -fsS http://127.0.0.1:9080/api/health
-curl -fsS http://127.0.0.1:9080/api/v1/status
-curl -fsS http://127.0.0.1:9080/api/v1/services
-curl -fsS http://127.0.0.1:9080/api/v1/navigation
+curl -fsS http://127.0.0.1:1111/api/health
+curl -fsS http://127.0.0.1:1111/api/v1/status
+curl -fsS http://127.0.0.1:1111/api/v1/services
+curl -fsS http://127.0.0.1:1111/api/v1/navigation
 ```
 
 停止：
@@ -98,7 +98,7 @@ cd ../../frontend
 npm install
 npm run typecheck
 npm run build
-# 固定开发地址：http://<NAS主机>:5175，/api 代理到生产/开发后端 9080
+# 固定开发地址：http://<NAS主机>:5175，/api 代理到生产/开发后端 1111
 npm run dev
 cd ..
 docker compose --env-file deploy/.env.example -f deploy/compose.yml config --quiet
@@ -122,7 +122,7 @@ sort=name|group|last_seen|order
 手动重新探测：
 
 ```bash
-curl -X POST http://127.0.0.1:9080/api/v1/services/<serviceKey>/probe
+curl -X POST http://127.0.0.1:1111/api/v1/services/<serviceKey>/probe
 ```
 
 ## 故障排查

@@ -11,7 +11,7 @@ set -a
 source "$ENV_FILE"
 set +a
 
-port="${NAS_HOME_PORT:-9080}"
+port="${NAS_HOME_PORT:-1111}"
 host="${NAS_HOME_PUBLIC_HOST:-}"
 if [[ -z "$host" || "$host" == "localhost" || "$host" == "127.0.0.1" ]]; then
   echo "NAS_HOME_PUBLIC_HOST 必须是 NAS 可被客户端访问的主机名或 IP（本机模式除外）" >&2

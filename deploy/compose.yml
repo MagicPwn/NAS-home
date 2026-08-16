@@ -44,7 +44,7 @@ services:
       docker-socket-proxy:
         condition: service_healthy
     ports:
-      - "${NAS_HOME_PORT:-9080}:8080"
+      - "${NAS_HOME_PORT:-1111}:8080"
     environment:
       NAS_HOME_PUBLIC_HOST: ${NAS_HOME_PUBLIC_HOST:?NAS_HOME_PUBLIC_HOST is required}
       NAS_HOME_PUBLIC_SCHEME: ${NAS_HOME_PUBLIC_SCHEME:-http}

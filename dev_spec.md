@@ -37,19 +37,19 @@
 默认访问地址：
 
 ```text
-http://<NAS_HOME_PUBLIC_HOST>:9080/
+http://<NAS_HOME_PUBLIC_HOST>:1111/
 ```
 
-默认宿主机端口：`9080`，容器内部端口：`8080`。
+默认宿主机端口：`1111`，容器内部端口：`8080`。
 
-当前 NAS 检查中 `9090` 已有服务监听，因此不使用容易混淆的 `9090`。部署脚本必须启动前检查 `9080` 是否被占用，并允许通过 `NAS_HOME_PORT` 覆盖，例如 `9180:8080`。
+当前 NAS 的 UGOS 系统 nginx 已占用 `9999`，因此默认使用 `1111`。部署脚本必须启动前检查 `1111` 是否被占用，并允许通过 `NAS_HOME_PORT` 覆盖，例如 `9180:8080`。
 
 严禁把 `localhost` 或容器内部 hostname 当作用户浏览器的默认链接主机。必须通过环境变量配置外部可访问主机：
 
 ```env
 NAS_HOME_PUBLIC_HOST=nas-host.example.invalid
 NAS_HOME_PUBLIC_SCHEME=http
-NAS_HOME_PORT=9080
+NAS_HOME_PORT=1111
 ```
 
 当 NAS 使用域名时，改为域名；当局域网没有 DNS 时，使用 NAS 局域网 IP。自动读取容器 hostname 只能作为启动提示，不能作为“准确链接”的最终依据。
@@ -533,7 +533,7 @@ sort=name|group|last_seen|order
 ### 9.1 `.env.example`
 
 ```env
-NAS_HOME_PORT=9080
+NAS_HOME_PORT=1111
 NAS_HOME_PUBLIC_HOST=nas-host.example.invalid
 NAS_HOME_PUBLIC_SCHEME=http
 NAS_HOME_POLL_INTERVAL=10s
@@ -558,7 +558,7 @@ NAS_HOME_AUTH_PASSWORD_FILE=/run/secrets/nas_home_password
 `deploy/compose.yml` 至少包含：
 
 - 服务名 `nas-home`；
-- `9080:8080`，可由 env 覆盖；
+- `1111:8080`，可由 env 覆盖；
 - `restart: unless-stopped`；
 - `/data` 持久化卷或绑定目录；
 - healthcheck：`GET /api/health`；
@@ -648,9 +648,9 @@ cd /volume2/workspace/service/nas-home
 ./scripts/preflight.sh
 docker compose config --quiet
 docker compose up -d --build
-curl -fsS http://127.0.0.1:9080/api/health
-curl -fsS http://127.0.0.1:9080/api/v1/status
-curl -fsS http://127.0.0.1:9080/api/v1/services
+curl -fsS http://127.0.0.1:1111/api/health
+curl -fsS http://127.0.0.1:1111/api/v1/status
+curl -fsS http://127.0.0.1:1111/api/v1/services
 ```
 
 必须验证：
@@ -765,7 +765,7 @@ curl -fsS http://127.0.0.1:9080/api/v1/services
 只有以下条件全部满足，才可称为 NAS Home 第一版完成：
 
 - [ ] 新项目目录与 Compose project 均为 `nas-home`；
-- [ ] 默认宿主端口为 9080，并支持 preflight 和 env 覆盖；
+- [ ] 默认宿主端口为 1111，并支持 preflight 和 env 覆盖；
 - [ ] 10 秒全量 reconcile 已实现并有测试；
 - [ ] Docker name、state、published port 解析有单元和集成测试；
 - [ ] 未发布端口不会生成假链接；

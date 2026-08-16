@@ -21,7 +21,7 @@ type Config struct {
 
 func Load() Config {
 	return Config{
-		Port:             getenv("NAS_HOME_PORT", "9080"),
+		Port:             getenv("NAS_HOME_PORT", "1111"),
 		PublicHost:       getenv("NAS_HOME_PUBLIC_HOST", ""),
 		PublicScheme:     getenv("NAS_HOME_PUBLIC_SCHEME", "http"),
 		PollInterval:     duration("NAS_HOME_POLL_INTERVAL", 10*time.Second),
